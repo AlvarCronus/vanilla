@@ -367,6 +367,19 @@ public final class PlaybackService extends Service
 	 * of user settings.
 	 */
 	private boolean mForceNotificationVisible;
+	/**
+	 * If true, read and apply ReplayGain volume adjustments.
+	 */
+	private boolean mEnableReplayGain;
+	/**
+	 * When ReplayGain is enabled, the gain to use for songs with no ReplayGain
+	 * tags.
+	 */
+	private float mNoDataGain;
+	/**
+	 * If true, use album gain instead of track gain.
+	 */
+	private boolean mUseAlbumGain;
 
 	@Override
 	public void onCreate()
@@ -414,8 +427,9 @@ public final class PlaybackService extends Service
 		mHeadsetPause = getSettings(this).getBoolean("headset_pause", true);
 		mShakeAction = settings.getBoolean("enable_shake", false) ? Action.getAction(settings, "shake_action", Action.NextSong) : Action.Nothing;
 		mShakeThreshold = settings.getInt("shake_threshold", 80) / 10.0f;
-
-		updateVolume();
+		mEnableReplayGain = settings.getBoolean("enable_replaygain", false);
+		mNoDataGain = (float)Math.pow(settings.getInt("fallback_gain", 68) / 100.0, 3);
+		mUseAlbumGain = "1".equals(settings.getString("replaygain_type", null));
 
 		PowerManager powerManager = (PowerManager)getSystemService(POWER_SERVICE);
 		mWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VanillaMusicLock");
@@ -584,11 +598,23 @@ public final class PlaybackService extends Service
 	}
 
 	/**
-	 * Set the volume gain on the MediaPlayer/Equalizer
+	 * Set the volume gain on the MediaPlayer/Equalizer. Accounts for user
+	 * volume preference and ReplayGain data.
 	 */
 	private void updateVolume()
 	{
 		float base = mUserVolume;
+
+		if (mEnableReplayGain && mCurrentSong != null) {
+			float trackGain = mUseAlbumGain ? mCurrentSong.albumGain() : mCurrentSong.trackGain();
+			if (trackGain == Float.MAX_VALUE) {
+				Log.d("VanillaMusic", "ReplayGain: no gain data found for this track");
+				trackGain = mNoDataGain;
+			} else {
+				Log.d("VanillaMusic", "ReplayGain: found track scale " + trackGain);
+			}
+			base *= trackGain;
+		}
 
 		if (base > 1.0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD) {
 			// In Gingerbread and above, MediaPlayer no longer accepts volumes
@@ -630,6 +656,15 @@ public final class PlaybackService extends Service
 			mScrobble = settings.getBoolean("scrobble", false);
 		} else if ("volume_int".equals(key)) {
 			mUserVolume = (float)Math.pow(settings.getInt(key, 100) / 100.0, 3);
+			updateVolume();
+		} else if ("enable_replaygain".equals(key)) {
+			mEnableReplayGain = settings.getBoolean(key, false);
+			updateVolume();
+		} else if ("fallback_gain".equals(key)) {
+			mNoDataGain = (float)Math.pow(settings.getInt(key, 68) / 100.0, 3);
+			updateVolume();
+		} else if ("replaygain_type".equals(key)) {
+			mUseAlbumGain = "1".equals(settings.getString(key, null));
 			updateVolume();
 		} else if ("media_button".equals(key)) {
 			MediaButtonReceiver.reloadPreference(this);
@@ -1020,6 +1055,8 @@ public final class PlaybackService extends Service
 				mMediaPlayer.seekTo(mPendingSeek);
 				mPendingSeek = 0;
 			}
+
+			updateVolume();
 
 			if ((mState & FLAG_PLAYING) != 0)
 				mMediaPlayer.start();
