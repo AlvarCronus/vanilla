@@ -22,8 +22,8 @@
 
 package org.kreed.vanilla;
 
+import android.annotation.TargetApi;
 import android.app.ActionBar;
-import android.app.ActionBar.Tab;
 import android.app.Activity;
 import android.app.FragmentTransaction;
 import android.net.Uri;
@@ -36,33 +36,53 @@ import android.widget.ListView;
 /**
  * Framework methods only in Honeycomb or above go here.
  */
+@TargetApi(11)
 public class CompatHoneycomb {
+	/**
+	 * Notifies the LibraryActivity ViewPager of selected tab changes.
+	 */
+	@TargetApi(11)
+	private static class TabListener implements ActionBar.TabListener {
+		/**
+		 * The activity to notify of tab changes.
+		 */
+		private final LibraryActivity mActivity;
+
+		/**
+		 * Create the listener.
+		 *
+		 * @param activity The activity to notify of tab changes.
+		 */
+		public TabListener(LibraryActivity activity)
+		{
+			mActivity = activity;
+		}
+
+		@Override
+		public void onTabReselected(ActionBar.Tab tab, FragmentTransaction ft)
+		{
+		}
+
+		@Override
+		public void onTabSelected(ActionBar.Tab tab, FragmentTransaction ft)
+		{
+			mActivity.mViewPager.setCurrentItem(tab.getPosition());
+		}
+
+		@Override
+		public void onTabUnselected(ActionBar.Tab tab, FragmentTransaction ft)
+		{
+		}
+	}
+
 	/**
 	 * Add ActionBar tabs for LibraryActivity.
 	 *
 	 * @param activity The activity to add to.
 	 */
-	public static void addActionBarTabs(final LibraryActivity activity)
+	public static void addActionBarTabs(LibraryActivity activity)
 	{
-		ActionBar.TabListener listener = new ActionBar.TabListener() {
-			private final LibraryActivity mActivity = activity;
-
-			@Override
-			public void onTabReselected(Tab tab, FragmentTransaction ft)
-			{
-			}
-
-			@Override
-			public void onTabSelected(Tab tab, FragmentTransaction ft)
-			{
-				mActivity.mViewPager.setCurrentItem(tab.getPosition());
-			}
-
-			@Override
-			public void onTabUnselected(Tab tab, FragmentTransaction ft)
-			{
-			}
-		};
+		ActionBar.TabListener listener = new TabListener(activity);
 
 		ActionBar ab = activity.getActionBar();
 		ab.addTab(ab.newTab()
